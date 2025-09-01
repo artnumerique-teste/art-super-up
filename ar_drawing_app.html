@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Drawing - Réalité Augmentée</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: auto;
+            z-index: 10;
+        }
+
+        #toolbar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 25px;
+            padding: 15px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            z-index: 20;
+            backdrop-filter: blur(10px);
+        }
+
+        .tool-btn {
+            width: 50px;
+            height: 50px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tool-btn:hover, .tool-btn.active {
+            background: #007AFF;
+            transform: scale(1.1);
+        }
+
+        .color-btn {
+            width: 40px;
+            height: 40px;
+            border: 3px solid white;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .color-btn:hover {
+            transform: scale(1.2);
+        }
+
+        .color-btn.selected {
+            border-color: #FFD700;
+            transform: scale(1.3);
+        }
+
+        #size-slider {
+            width: 100px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        #size-slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #007AFF;
+            cursor: pointer;
+        }
+
+        #instructions {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            z-index: 15;
+            display: none;
+        }
+
+        #instructions.show {
+            display: block;
+        }
+
+        .artwork-item {
+            position: absolute;
+            pointer-events: none;
+            z-index: 5;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .floating-artwork {
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            25% { transform: translateY(-20px) rotate(2deg); }
+            50% { transform: translateY(-10px) rotate(-1deg); }
+            75% { transform: translateY(-15px) rotate(1deg); }
+        }
+
+        #gallery {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 80px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            padding: 10px;
+            backdrop-filter: blur(10px);
+            z-index: 15;
+        }
+
+        .gallery-item {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .gallery-item:hover {
+            border-color: #007AFF;
+            transform: scale(1.1);
+        }
+
+        #start-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(45deg, #007AFF, #00D4FF);
+            border: none;
+            padding: 20px 40px;
+            border-radius: 30px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 30;
+            box-shadow: 0 10px 30px rgba(0, 122, 255, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        #start-btn:hover {
+            transform: translate(-50%, -50%) scale(1.05);
+            box-shadow: 0 15px 40px rgba(0, 122, 255, 0.6);
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="canvas"></canvas>
+        
+        <div id="instructions">
+            <h3>🎨 Dessinez en Réalité Augmentée!</h3>
+            <p>• Touchez et glissez pour dessiner dans l'espace</p>
+            <p>• Vos créations flottent dans le monde réel</p>
+            <p>• Changez de couleur et taille avec les outils</p>
+            <p>• Appuyez sur 👁️ pour masquer ces instructions</p>
+        </div>
+
+        <div id="gallery">
+            <div class="gallery-item" style="background: linear-gradient(45deg, #FF6B6B, #4ECDC4);"></div>
+            <div class="gallery-item" style="background: linear-gradient(45deg, #A8E6CF, #FFD93D);"></div>
+            <div class="gallery-item" style="background: linear-gradient(45deg, #FF8A65, #BA68C8);"></div>
+        </div>
+
+        <div id="toolbar">
+            <button class="tool-btn active" id="draw-btn" title="Dessiner">✏️</button>
+            <button class="tool-btn" id="erase-btn" title="Effacer">🗑️</button>
+            
+            <div class="color-btn selected" style="background: #FF6B6B;" data-color="#FF6B6B"></div>
+            <div class="color-btn" style="background: #4ECDC4;" data-color="#4ECDC4"></div>
+            <div class="color-btn" style="background: #45B7D1;" data-color="#45B7D1"></div>
+            <div class="color-btn" style="background: #96CEB4;" data-color="#96CEB4"></div>
+            <div class="color-btn" style="background: #FFEAA7;" data-color="#FFEAA7"></div>
+            <div class="color-btn" style="background: #DDA0DD;" data-color="#DDA0DD"></div>
+            
+            <input type="range" id="size-slider" min="2" max="20" value="5">
+            <button class="tool-btn" id="clear-btn" title="Tout effacer">🧹</button>
+            <button class="tool-btn" id="info-btn" title="Instructions">👁️</button>
+        </div>
+
+        <button id="start-btn">🚀 Commencer l'expérience AR</button>
+    </div>
+
+    <script>
+        class ARDrawingApp {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.video = document.getElementById('video');
+                
+                this.isDrawing = false;
+                this.currentColor = '#FF6B6B';
+                this.currentSize = 5;
+                this.mode = 'draw';
+                
+                this.artworks = [];
+                this.currentPath = [];
+                
+                this.setupCanvas();
+                this.setupEventListeners();
+                this.createFloatingArtworks();
+            }
+
+            setupCanvas() {
+                const resizeCanvas = () => {
+                    this.canvas.width = window.innerWidth;
+                    this.canvas.height = window.innerHeight;
+                    this.redrawCanvas();
+                };
+                
+                window.addEventListener('resize', resizeCanvas);
+                resizeCanvas();
+            }
+
+            setupEventListeners() {
+                // Bouton de démarrage
+                document.getElementById('start-btn').addEventListener('click', () => {
+                    this.startCamera();
+                });
+
+                // Outils
+                document.getElementById('draw-btn').addEventListener('click', () => this.setMode('draw'));
+                document.getElementById('erase-btn').addEventListener('click', () => this.setMode('erase'));
+                document.getElementById('clear-btn').addEventListener('click', () => this.clearAll());
+                document.getElementById('info-btn').addEventListener('click', () => this.toggleInstructions());
+
+                // Couleurs
+                document.querySelectorAll('.color-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => this.setColor(e.target.dataset.color, e.target));
+                });
+
+                // Taille
+                document.getElementById('size-slider').addEventListener('input', (e) => {
+                    this.currentSize = e.target.value;
+                });
+
+                // Dessin
+                this.canvas.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false });
+                this.canvas.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
+                this.canvas.addEventListener('touchend', this.handleTouchEnd.bind(this), { passive: false });
+                
+                // Support souris pour les tests
+                this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+                this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+                this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+            }
+
+            async startCamera() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: { 
+                            facingMode: 'environment',
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 }
+                        }
+                    });
+                    
+                    this.video.srcObject = stream;
+                    document.getElementById('start-btn').style.display = 'none';
+                    document.getElementById('instructions').classList.add('show');
+                    
+                    setTimeout(() => {
+                        document.getElementById('instructions').classList.remove('show');
+                    }, 5000);
+                    
+                } catch (err) {
+                    console.error('Erreur d\'accès à la caméra:', err);
+                    alert('Impossible d\'accéder à la caméra. Veuillez autoriser l\'accès.');
+                }
+            }
+
+            setMode(mode) {
+                this.mode = mode;
+                document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+                document.getElementById(mode + '-btn').classList.add('active');
+                this.canvas.style.cursor = mode === 'draw' ? 'crosshair' : 'pointer';
+            }
+
+            setColor(color, element) {
+                this.currentColor = color;
+                document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('selected'));
+                element.classList.add('selected');
+            }
+
+            getEventPos(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            }
+
+            handleTouchStart(e) {
+                e.preventDefault();
+                const pos = this.getEventPos(e);
+                this.startDrawing(pos);
+            }
+
+            handleTouchMove(e) {
+                e.preventDefault();
+                if (this.isDrawing) {
+                    const pos = this.getEventPos(e);
+                    this.draw(pos);
+                }
+            }
+
+            handleTouchEnd(e) {
+                e.preventDefault();
+                this.stopDrawing();
+            }
+
+            handleMouseDown(e) {
+                const pos = this.getEventPos(e);
+                this.startDrawing(pos);
+            }
+
+            handleMouseMove(e) {
+                if (this.isDrawing) {
+                    const pos = this.getEventPos(e);
+                    this.draw(pos);
+                }
+            }
+
+            handleMouseUp(e) {
+                this.stopDrawing();
+            }
+
+            startDrawing(pos) {
+                this.isDrawing = true;
+                this.currentPath = [{
+                    x: pos.x,
+                    y: pos.y,
+                    color: this.currentColor,
+                    size: this.currentSize,
+                    mode: this.mode
+                }];
+
+                if (this.mode === 'erase') {
+                    this.eraseAt(pos);
+                }
+            }
+
+            draw(pos) {
+                if (this.mode === 'draw') {
+                    this.currentPath.push({
+                        x: pos.x,
+                        y: pos.y,
+                        color: this.currentColor,
+                        size: this.currentSize,
+                        mode: this.mode
+                    });
+
+                    // Dessiner en temps réel
+                    this.ctx.globalCompositeOperation = 'source-over';
+                    this.ctx.strokeStyle = this.currentColor;
+                    this.ctx.lineWidth = this.currentSize;
+                    this.ctx.lineCap = 'round';
+                    this.ctx.lineJoin = 'round';
+
+                    if (this.currentPath.length > 1) {
+                        const prev = this.currentPath[this.currentPath.length - 2];
+                        const curr = this.currentPath[this.currentPath.length - 1];
+
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(prev.x, prev.y);
+                        this.ctx.lineTo(curr.x, curr.y);
+                        this.ctx.stroke();
+                    }
+                } else if (this.mode === 'erase') {
+                    this.eraseAt(pos);
+                }
+            }
+
+            stopDrawing() {
+                if (this.isDrawing && this.currentPath.length > 0 && this.mode === 'draw') {
+                    this.artworks.push([...this.currentPath]);
+                    this.addFloatingEffect();
+                }
+                this.isDrawing = false;
+                this.currentPath = [];
+            }
+
+            eraseAt(pos) {
+                const eraseRadius = this.currentSize * 2;
+                
+                this.artworks = this.artworks.filter(artwork => {
+                    return !artwork.some(point => {
+                        const distance = Math.sqrt(
+                            Math.pow(point.x - pos.x, 2) + 
+                            Math.pow(point.y - pos.y, 2)
+                        );
+                        return distance < eraseRadius;
+                    });
+                });
+
+                this.redrawCanvas();
+            }
+
+            redrawCanvas() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                this.artworks.forEach(artwork => {
+                    if (artwork.length > 0) {
+                        this.ctx.globalCompositeOperation = 'source-over';
+                        this.ctx.strokeStyle = artwork[0].color;
+                        this.ctx.lineWidth = artwork[0].size;
+                        this.ctx.lineCap = 'round';
+                        this.ctx.lineJoin = 'round';
+
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(artwork[0].x, artwork[0].y);
+                        
+                        for (let i = 1; i < artwork.length; i++) {
+                            this.ctx.lineTo(artwork[i].x, artwork[i].y);
+                        }
+                        this.ctx.stroke();
+                    }
+                });
+            }
+
+            addFloatingEffect() {
+                // Ajouter un effet de particules sur la dernière œuvre
+                const lastArtwork = this.artworks[this.artworks.length - 1];
+                if (lastArtwork && lastArtwork.length > 0) {
+                    const centerX = lastArtwork.reduce((sum, p) => sum + p.x, 0) / lastArtwork.length;
+                    const centerY = lastArtwork.reduce((sum, p) => sum + p.y, 0) / lastArtwork.length;
+                    
+                    this.createSparkles(centerX, centerY);
+                }
+            }
+
+            createSparkles(x, y) {
+                for (let i = 0; i < 8; i++) {
+                    setTimeout(() => {
+                        const sparkle = document.createElement('div');
+                        sparkle.style.position = 'absolute';
+                        sparkle.style.left = x + 'px';
+                        sparkle.style.top = y + 'px';
+                        sparkle.style.width = '8px';
+                        sparkle.style.height = '8px';
+                        sparkle.style.background = '#FFD700';
+                        sparkle.style.borderRadius = '50%';
+                        sparkle.style.pointerEvents = 'none';
+                        sparkle.style.zIndex = '25';
+                        sparkle.style.animation = 'sparkle 1s ease-out forwards';
+                        
+                        // Ajouter l'animation sparkle
+                        if (!document.querySelector('#sparkle-style')) {
+                            const style = document.createElement('style');
+                            style.id = 'sparkle-style';
+                            style.textContent = `
+                                @keyframes sparkle {
+                                    0% { 
+                                        transform: scale(0) translate(0, 0);
+                                        opacity: 1;
+                                    }
+                                    100% { 
+                                        transform: scale(1) translate(${Math.random() * 100 - 50}px, ${Math.random() * 100 - 50}px);
+                                        opacity: 0;
+                                    }
+                                }
+                            `;
+                            document.head.appendChild(style);
+                        }
+                        
+                        document.body.appendChild(sparkle);
+                        
+                        setTimeout(() => {
+                            if (sparkle.parentNode) {
+                                sparkle.parentNode.removeChild(sparkle);
+                            }
+                        }, 1000);
+                    }, i * 50);
+                }
+            }
+
+            clearAll() {
+                this.artworks = [];
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Animation de nettoyage
+                const overlay = document.createElement('div');
+                overlay.style.position = 'absolute';
+                overlay.style.top = '0';
+                overlay.style.left = '0';
+                overlay.style.width = '100%';
+                overlay.style.height = '100%';
+                overlay.style.background = 'rgba(255, 255, 255, 0.8)';
+                overlay.style.zIndex = '30';
+                overlay.style.animation = 'flash 0.5s ease-out';
+                
+                if (!document.querySelector('#flash-style')) {
+                    const style = document.createElement('style');
+                    style.id = 'flash-style';
+                    style.textContent = `
+                        @keyframes flash {
+                            0% { opacity: 0; }
+                            50% { opacity: 1; }
+                            100% { opacity: 0; }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+                
+                document.getElementById('container').appendChild(overlay);
+                setTimeout(() => overlay.remove(), 500);
+            }
+
+            toggleInstructions() {
+                const instructions = document.getElementById('instructions');
+                instructions.classList.toggle('show');
+            }
+
+            createFloatingArtworks() {
+                const shapes = ['🌟', '✨', '🎨', '🖌️', '🎭', '🌈'];
+                
+                for (let i = 0; i < 6; i++) {
+                    setTimeout(() => {
+                        const artwork = document.createElement('div');
+                        artwork.className = 'artwork-item floating-artwork';
+                        artwork.innerHTML = shapes[Math.floor(Math.random() * shapes.length)];
+                        artwork.style.fontSize = Math.random() * 30 + 20 + 'px';
+                        artwork.style.left = Math.random() * (window.innerWidth - 50) + 'px';
+                        artwork.style.top = Math.random() * (window.innerHeight - 50) + 'px';
+                        artwork.style.opacity = '0.7';
+                        artwork.style.animationDelay = Math.random() * 2 + 's';
+                        artwork.style.animationDuration = (Math.random() * 4 + 4) + 's';
+                        
+                        document.getElementById('container').appendChild(artwork);
+                        
+                        setTimeout(() => {
+                            if (artwork.parentNode) {
+                                artwork.parentNode.removeChild(artwork);
+                            }
+                        }, 10000);
+                    }, i * 1000);
+                }
+
+                // Recréer les œuvres flottantes périodiquement
+                setTimeout(() => this.createFloatingArtworks(), 15000);
+            }
+        }
+
+        // Initialiser l'application
+        let app;
+        window.addEventListener('load', () => {
+            app = new ARDrawingApp();
+        });
+
+        // Empêcher le zoom et les gestes par défaut sur iPad
+        document.addEventListener('touchstart', function(e) {
+            if (e.touches.length > 1) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function(e) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                e.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+
+        document.addEventListener('gesturestart', function(e) {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
