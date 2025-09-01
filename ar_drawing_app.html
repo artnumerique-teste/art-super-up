@@ -1,1060 +1,465 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Drawing & Virtual Gallery</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            overflow: hidden;
-        }
-        
-        .app-container {
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .header {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 1rem;
-            display: flex;
-            justify-content: between;
-            align-items: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        
-        .logo {
-            color: white;
-            font-size: 1.5rem;
-            font-weight: bold;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }
-        
-        .mode-toggle {
-            display: flex;
-            gap: 1rem;
-        }
-        
-        .mode-btn {
-            padding: 0.5rem 1rem;
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            border-radius: 25px;
-            color: white;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 500;
-        }
-        
-        .mode-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: translateY(-2px);
-        }
-        
-        .mode-btn.active {
-            background: rgba(255, 255, 255, 0.4);
-            box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
-        }
-        
-        .main-content {
-            flex: 1;
-            position: relative;
-        }
-        
-        .drawing-mode, .gallery-mode {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: none;
-        }
-        
-        .drawing-mode.active, .gallery-mode.active {
-            display: block;
-        }
-        
-        .drawing-canvas {
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.95);
-            cursor: crosshair;
-        }
-        
-        .drawing-toolbar {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            padding: 1rem;
-            border-radius: 15px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            z-index: 100;
-        }
-        
-        .tool-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        
-        .tool-label {
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: #333;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .color-picker {
-            width: 40px;
-            height: 40px;
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        }
-        
-        .brush-size {
-            width: 100px;
-            appearance: none;
-            height: 5px;
-            border-radius: 5px;
-            background: linear-gradient(to right, #667eea, #764ba2);
-            outline: none;
-        }
-        
-        .brush-size::-webkit-slider-thumb {
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: white;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-            cursor: pointer;
-        }
-        
-        .action-btn {
-            padding: 0.5rem 1rem;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-        
-        .action-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        }
-        
-        .gallery-container {
-            width: 100%;
-            height: 100%;
-            position: relative;
-        }
-        
-        .ar-viewport {
-            width: 100%;
-            height: 100%;
-            background: #000;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .camera-video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
-        
-        .ar-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 5;
-        }
-        
-        .ar-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 10;
-        }
-        
-        .ar-controls {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 1rem;
-            z-index: 100;
-        }
-        
-        .camera-controls {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            z-index: 100;
-        }
-        
-        .camera-btn {
-            padding: 0.8rem;
-            background: rgba(255, 255, 255, 0.9);
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            transition: all 0.3s ease;
-            font-size: 1rem;
-            font-weight: 600;
-            color: #333;
-        }
-        
-        .camera-btn:hover {
-            background: white;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-        }
-        
-        .camera-btn.active {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-        }
-        
-        .ar-btn {
-            padding: 1rem;
-            background: rgba(255, 255, 255, 0.9);
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            transition: all 0.3s ease;
-            width: 60px;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-        }
-        
-        .ar-btn:hover {
-            background: white;
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-        }
-        
-        .artwork-info {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 1rem;
-            border-radius: 10px;
-            max-width: 250px;
-            z-index: 100;
-        }
-        
-        .artwork-counter {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-weight: 600;
-            z-index: 100;
-        }
-        
-        .loading-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.2rem;
-            z-index: 1000;
-            flex-direction: column;
-            gap: 1rem;
-        }
-        
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-top: 3px solid white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .floating-artwork {
-            position: absolute;
-            border-radius: 10px;
-            box-shadow: 0 8px 32px rgba(255, 255, 255, 0.3);
-            transition: all 0.5s ease;
-            cursor: pointer;
-        }
-        
-        .floating-artwork:hover {
-            transform: scale(1.1) rotateY(15deg);
-            box-shadow: 0 12px 48px rgba(255, 255, 255, 0.5);
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AR Drawing & Virtual Gallery — Fix</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      overflow: hidden;
+    }
+    .app-container { height: 100vh; display: flex; flex-direction: column; }
+    .header {
+      background: rgba(255, 255, 255, 0.1);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      padding: 1rem; display: flex; justify-content: space-between; align-items: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,.1);
+    }
+    .logo { color: #fff; font-size: 1.5rem; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,.3); }
+    .mode-toggle { display: flex; gap: 1rem; }
+    .mode-btn { padding: .5rem 1rem; background: rgba(255,255,255,.2); border: none; border-radius: 25px; color: #fff; cursor: pointer; transition: .3s; font-weight: 500; }
+    .mode-btn:hover { background: rgba(255,255,255,.3); transform: translateY(-2px); }
+    .mode-btn.active { background: rgba(255,255,255,.4); box-shadow: 0 4px 15px rgba(255,255,255,.2); }
+    .main-content { flex: 1; position: relative; }
+    .drawing-mode, .gallery-mode { position: absolute; inset: 0; display: none; }
+    .drawing-mode.active, .gallery-mode.active { display: block; }
+    .drawing-canvas { width: 100%; height: 100%; background: rgba(255,255,255,.95); cursor: crosshair; }
+    .drawing-toolbar { position: absolute; top: 20px; left: 20px; background: rgba(255,255,255,.9); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); padding: 1rem; border-radius: 15px; box-shadow: 0 8px 32px rgba(0,0,0,.1); display: flex; flex-direction: column; gap: 1rem; z-index: 100; }
+    .tool-group { display: flex; flex-direction: column; gap: .5rem; }
+    .tool-label { font-size: .8rem; font-weight: 600; color: #333; text-transform: uppercase; letter-spacing: .5px; }
+    .color-picker { width: 40px; height: 40px; border: none; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+    .brush-size { width: 100px; appearance: none; height: 5px; border-radius: 5px; background: linear-gradient(to right, #667eea, #764ba2); outline: none; }
+    .brush-size::-webkit-slider-thumb { appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); cursor: pointer; }
+    .action-btn { padding: .5rem 1rem; background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; transition: .3s; }
+    .action-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(102,126,234,.4); }
+    .gallery-container { width: 100%; height: 100%; position: relative; }
+    .ar-viewport { width: 100%; height: 100%; background: #000; position: relative; overflow: hidden; }
+    .camera-video { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; z-index: 1; }
+    .ar-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; }
+    .ar-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+    .ar-controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 1rem; z-index: 100; }
+    .camera-controls { position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: .5rem; z-index: 100; }
+    .camera-btn { padding: .8rem; background: rgba(255,255,255,.9); border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,.2); transition: .3s; font-size: 1rem; font-weight: 600; color: #333; }
+    .camera-btn:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+    .camera-btn.active { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
+    .ar-btn { padding: 1rem; background: rgba(255,255,255,.9); border: none; border-radius: 50%; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,.2); transition: .3s; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+    .ar-btn:hover { background: #fff; transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+    .artwork-info { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,.8); color: #fff; padding: 1rem; border-radius: 10px; max-width: 260px; z-index: 100; display: none; }
+    .artwork-counter { position: absolute; top: 20px; left: 20px; background: rgba(255,255,255,.9); padding: .5rem 1rem; border-radius: 20px; font-weight: 600; z-index: 100; }
+    .loading-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.8); display: none; align-items: center; justify-content: center; color: #fff; font-size: 1.2rem; z-index: 1000; flex-direction: column; gap: 1rem; }
+    .spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,.3); border-top: 3px solid #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0) } 100% { transform: rotate(360deg) } }
+    .floating-artwork { position: absolute; border-radius: 10px; box-shadow: 0 8px 32px rgba(255,255,255,.3); transition: .5s; cursor: pointer; }
+    .floating-artwork:hover { transform: scale(1.1) rotateY(15deg); box-shadow: 0 12px 48px rgba(255,255,255,.5); }
+  </style>
 </head>
 <body>
-    <div class="app-container">
-        <header class="header">
-            <div class="logo">🎨 AR Gallery Studio</div>
-            <div class="mode-toggle">
-                <button class="mode-btn active" onclick="switchMode('drawing')">✏️ Dessiner</button>
-                <button class="mode-btn" onclick="switchMode('gallery')">🥽 Galerie AR</button>
-            </div>
-        </header>
-        
-        <div class="main-content">
-            <!-- Mode Dessin -->
-            <div class="drawing-mode active">
-                <canvas class="drawing-canvas" id="drawingCanvas"></canvas>
-                <div class="drawing-toolbar">
-                    <div class="tool-group">
-                        <label class="tool-label">Couleur</label>
-                        <input type="color" class="color-picker" id="colorPicker" value="#667eea">
-                    </div>
-                    <div class="tool-group">
-                        <label class="tool-label">Taille</label>
-                        <input type="range" class="brush-size" id="brushSize" min="1" max="50" value="5">
-                        <span id="brushSizeValue">5px</span>
-                    </div>
-                    <div class="tool-group">
-                        <button class="action-btn" onclick="clearCanvas()">🗑️ Effacer</button>
-                        <button class="action-btn" onclick="saveArtwork()">💾 Sauver</button>
-                        <button class="action-btn" onclick="undoLastStroke()">↶ Annuler</button>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Mode Galerie AR -->
-            <div class="gallery-mode">
-                <div class="gallery-container">
-                    <div class="ar-viewport" id="arViewport">
-                        <video class="camera-video" id="cameraVideo" autoplay muted playsinline style="display: none;"></video>
-                        <canvas class="ar-canvas" id="arCanvas"></canvas>
-                    </div>
-                    <div class="ar-overlay" id="arOverlay"></div>
-                    
-                    <div class="camera-controls">
-                        <button class="camera-btn" id="cameraToggle" onclick="toggleCamera()">📷 Activer AR</button>
-                        <button class="camera-btn" onclick="switchCamera()">🔄 Basculer</button>
-                        <button class="camera-btn" onclick="takeScreenshot()">📸 Capture</button>
-                    </div>
-                    
-                    <div class="artwork-counter" id="artworkCounter">
-                        0 œuvres dans la galerie
-                    </div>
-                    
-                    <div class="artwork-info" id="artworkInfo" style="display: none;">
-                        <h3 id="artworkTitle">Œuvre Sans Titre</h3>
-                        <p id="artworkDate">Créée aujourd'hui</p>
-                        <p id="artworkDetails">Cliquez pour interagir</p>
-                    </div>
-                    
-                    <div class="ar-controls">
-                        <button class="ar-btn" onclick="resetARView()" title="Réinitialiser la vue">🔄</button>
-                        <button class="ar-btn" onclick="toggleARInteraction()" title="Mode Interaction">👆</button>
-                        <button class="ar-btn" onclick="shareGallery()" title="Partager">📤</button>
-                    </div>
-                </div>
-                
-                <div class="loading-overlay" id="loadingOverlay">
-                    <div class="spinner"></div>
-                    <p>Chargement de la galerie AR...</p>
-                </div>
-            </div>
-        </div>
-    </div>
+  <div class="app-container">
+    <header class="header">
+      <div class="logo">🎨 AR Gallery Studio</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" onclick="switchMode(event,'drawing')">✏️ Dessiner</button>
+        <button class="mode-btn" onclick="switchMode(event,'gallery')">🥽 Galerie AR</button>
+      </div>
+    </header>
 
-    <script>
-        // Variables globales
-        let currentMode = 'drawing';
-        let canvas, ctx;
-        let isDrawing = false;
-        let currentColor = '#667eea';
-        let currentBrushSize = 5;
-        let artworks = [];
-        let strokes = [];
-        let currentStroke = [];
-        let scene, camera, renderer;
-        let artworkMeshes = [];
-        let isARMode = false;
-        let cameraStream = null;
-        let arCanvas, arCtx;
-        let currentCameraFacing = 'environment'; // 'user' pour avant, 'environment' pour arrière
-        
-        // Initialisation de l'application
-        document.addEventListener('DOMContentLoaded', function() {
-            initDrawingMode();
-            initGalleryMode();
-            loadArtworks();
-        });
-        
-        // Initialisation du mode dessin
-        function initDrawingMode() {
-            canvas = document.getElementById('drawingCanvas');
-            ctx = canvas.getContext('2d');
-            
-            // Ajustement de la taille du canvas
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
-            
-            // Configuration du contexte de dessin
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            
-            // Événements de dessin
-            canvas.addEventListener('mousedown', startDrawing);
-            canvas.addEventListener('mousemove', draw);
-            canvas.addEventListener('mouseup', stopDrawing);
-            canvas.addEventListener('mouseout', stopDrawing);
-            
-            // Événements tactiles pour mobile
-            canvas.addEventListener('touchstart', handleTouch);
-            canvas.addEventListener('touchmove', handleTouch);
-            canvas.addEventListener('touchend', stopDrawing);
-            
-            // Mise à jour des outils
-            document.getElementById('colorPicker').addEventListener('change', (e) => {
-                currentColor = e.target.value;
-            });
-            
-            document.getElementById('brushSize').addEventListener('input', (e) => {
-                currentBrushSize = e.target.value;
-                document.getElementById('brushSizeValue').textContent = e.target.value + 'px';
-            });
-        }
-        
-        function resizeCanvas() {
-            const rect = canvas.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = rect.height;
-        }
-        
-        function startDrawing(e) {
-            isDrawing = true;
-            currentStroke = [];
-            const pos = getMousePos(e);
-            ctx.beginPath();
-            ctx.moveTo(pos.x, pos.y);
-            currentStroke.push({x: pos.x, y: pos.y, color: currentColor, size: currentBrushSize});
-        }
-        
-        function draw(e) {
-            if (!isDrawing) return;
-            
-            const pos = getMousePos(e);
-            ctx.lineWidth = currentBrushSize;
-            ctx.strokeStyle = currentColor;
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
-            
-            currentStroke.push({x: pos.x, y: pos.y, color: currentColor, size: currentBrushSize});
-        }
-        
-        function stopDrawing() {
-            if (isDrawing) {
-                isDrawing = false;
-                if (currentStroke.length > 0) {
-                    strokes.push([...currentStroke]);
-                }
-            }
-        }
-        
-        function getMousePos(e) {
-            const rect = canvas.getBoundingClientRect();
-            return {
-                x: (e.clientX || e.touches[0].clientX) - rect.left,
-                y: (e.clientY || e.touches[0].clientY) - rect.top
-            };
-        }
-        
-        function handleTouch(e) {
-            e.preventDefault();
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent(e.type === 'touchstart' ? 'mousedown' : 'mousemove', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            canvas.dispatchEvent(mouseEvent);
-        }
-        
-        function clearCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            strokes = [];
-        }
-        
-        function undoLastStroke() {
-            if (strokes.length > 0) {
-                strokes.pop();
-                redrawCanvas();
-            }
-        }
-        
-        function redrawCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            strokes.forEach(stroke => {
-                if (stroke.length > 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(stroke[0].x, stroke[0].y);
-                    
-                    for (let i = 1; i < stroke.length; i++) {
-                        ctx.lineWidth = stroke[i].size;
-                        ctx.strokeStyle = stroke[i].color;
-                        ctx.lineTo(stroke[i].x, stroke[i].y);
-                    }
-                    ctx.stroke();
-                }
-            });
-        }
-        
-        function saveArtwork() {
-            if (strokes.length === 0) {
-                alert('Aucun dessin à sauvegarder !');
-                return;
-            }
-            
-            const artwork = {
-                id: Date.now(),
-                title: `Œuvre ${artworks.length + 1}`,
-                date: new Date().toLocaleDateString('fr-FR'),
-                strokes: JSON.parse(JSON.stringify(strokes)),
-                thumbnail: canvas.toDataURL('image/png', 0.3)
-            };
-            
-            artworks.push(artwork);
-            saveArtworksToStorage();
-            
-            // Feedback visuel
-            const toolbar = document.querySelector('.drawing-toolbar');
-            toolbar.style.background = 'rgba(102, 234, 146, 0.9)';
-            setTimeout(() => {
-                toolbar.style.background = 'rgba(255, 255, 255, 0.9)';
-            }, 500);
-            
-            alert('Œuvre sauvegardée ! Allez voir la galerie AR.');
-        }
-        
-        // Initialisation du mode galerie AR
-        function initGalleryMode() {
-            const viewport = document.getElementById('arViewport');
-            arCanvas = document.getElementById('arCanvas');
-            arCtx = arCanvas.getContext('2d');
-            
-            // Ajustement de la taille du canvas AR
-            resizeARCanvas();
-            window.addEventListener('resize', resizeARCanvas);
-            
-            // Configuration Three.js
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, viewport.offsetWidth / viewport.offsetHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer({ 
-                canvas: arCanvas,
-                antialias: true, 
-                alpha: true 
-            });
-            
-            renderer.setSize(viewport.offsetWidth, viewport.offsetHeight);
-            renderer.setClearColor(0x000000, 0);
-            
-            // Éclairage
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-            scene.add(ambientLight);
-            
-            const pointLight = new THREE.PointLight(0xffffff, 1);
-            pointLight.position.set(10, 10, 10);
-            scene.add(pointLight);
-            
-            // Position initiale de la caméra
-            camera.position.z = 5;
-            
-            // Contrôles tactiles et souris
-            let isDragging = false;
-            let previousTouch = null;
-            
-            arCanvas.addEventListener('mousedown', startCameraControl);
-            arCanvas.addEventListener('mousemove', updateCameraControl);
-            arCanvas.addEventListener('mouseup', stopCameraControl);
-            
-            arCanvas.addEventListener('touchstart', handleTouchStart);
-            arCanvas.addEventListener('touchmove', handleTouchMove);
-            arCanvas.addEventListener('touchend', stopCameraControl);
-            
-            function startCameraControl(e) {
-                isDragging = true;
-            }
-            
-            function updateCameraControl(e) {
-                if (!isDragging) return;
-                
-                const rect = arCanvas.getBoundingClientRect();
-                const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-                const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-                
-                camera.position.x = x * 3;
-                camera.position.y = y * 3;
-                camera.lookAt(scene.position);
-            }
-            
-            function stopCameraControl() {
-                isDragging = false;
-                previousTouch = null;
-            }
-            
-            function handleTouchStart(e) {
-                e.preventDefault();
-                const touch = e.touches[0];
-                previousTouch = { x: touch.clientX, y: touch.clientY };
-                isDragging = true;
-            }
-            
-            function handleTouchMove(e) {
-                e.preventDefault();
-                if (!isDragging || !previousTouch) return;
-                
-                const touch = e.touches[0];
-                const deltaX = touch.clientX - previousTouch.x;
-                const deltaY = touch.clientY - previousTouch.y;
-                
-                camera.position.x += deltaX * 0.01;
-                camera.position.y -= deltaY * 0.01;
-                camera.lookAt(scene.position);
-                
-                previousTouch = { x: touch.clientX, y: touch.clientY };
-            }
-            
-            // Démarrage de la boucle de rendu
-            animate();
-        }
-        
-        function resizeARCanvas() {
-            const viewport = document.getElementById('arViewport');
-            arCanvas.width = viewport.offsetWidth;
-            arCanvas.height = viewport.offsetHeight;
-            
-            if (renderer) {
-                renderer.setSize(viewport.offsetWidth, viewport.offsetHeight);
-                camera.aspect = viewport.offsetWidth / viewport.offsetHeight;
-                camera.updateProjectionMatrix();
-            }
-        }
-        
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            if (currentMode === 'gallery') {
-                // Animation des œuvres flottantes
-                artworkMeshes.forEach((mesh, index) => {
-                    mesh.rotation.y += 0.005;
-                    mesh.position.y = Math.sin(Date.now() * 0.001 + index) * 0.3;
-                });
-                
-                renderer.render(scene, camera);
-            }
-        }
-        
-        function loadGalleryArtworks() {
-            // Nettoyage des œuvres précédentes
-            artworkMeshes.forEach(mesh => scene.remove(mesh));
-            artworkMeshes = [];
-            
-            if (artworks.length === 0) {
-                document.getElementById('artworkCounter').textContent = 'Aucune œuvre dans la galerie';
-                return;
-            }
-            
-            document.getElementById('artworkCounter').textContent = `${artworks.length} œuvre(s) dans la galerie`;
-            
-            // Création des œuvres en 3D
-            artworks.forEach((artwork, index) => {
-                const texture = new THREE.CanvasTexture(createArtworkCanvas(artwork));
-                texture.flipY = false; // Important pour l'orientation correcte
-                
-                const geometry = new THREE.PlaneGeometry(2, 1.5);
-                const material = new THREE.MeshLambertMaterial({ 
-                    map: texture, 
-                    transparent: true,
-                    side: THREE.DoubleSide,
-                    opacity: 0.9
-                });
-                
-                const mesh = new THREE.Mesh(geometry, material);
-                
-                // Position en cercle avec plus de variation
-                const angle = (index / artworks.length) * Math.PI * 2;
-                const radius = 3 + Math.sin(index * 1.5) * 0.5; // Rayon variable
-                mesh.position.x = Math.cos(angle) * radius;
-                mesh.position.z = Math.sin(angle) * radius;
-                mesh.position.y = (Math.sin(index * 2) * 1.5); // Hauteur variée
-                
-                // Rotation vers le centre avec légère inclinaison
-                mesh.lookAt(0, mesh.position.y, 0);
-                mesh.rotation.z = (Math.random() - 0.5) * 0.3; // Rotation aléatoire légère
-                
-                // Données pour l'interaction
-                mesh.userData = { 
-                    artwork, 
-                    index,
-                    originalPosition: mesh.position.clone(),
-                    originalRotation: mesh.rotation.clone()
-                };
-                
-                // Gestion des clics sur les œuvres
-                mesh.callback = function() {
-                    showArtworkInfo(artwork);
-                };
-                
-                scene.add(mesh);
-                artworkMeshes.push(mesh);
-            });
-            
-            // Détection de clic sur les œuvres
-            arCanvas.addEventListener('click', onArtworkClick);
-        }
-        
-        function onArtworkClick(event) {
-            const rect = arCanvas.getBoundingClientRect();
-            const mouse = new THREE.Vector2();
-            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-            
-            const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera(mouse, camera);
-            
-            const intersects = raycaster.intersectObjects(artworkMeshes);
-            
-            if (intersects.length > 0) {
-                const selectedArtwork = intersects[0].object.userData.artwork;
-                showArtworkInfo(selectedArtwork);
-                
-                // Animation de sélection
-                const mesh = intersects[0].object;
-                const originalScale = mesh.scale.clone();
-                mesh.scale.multiplyScalar(1.2);
-                
-                setTimeout(() => {
-                    mesh.scale.copy(originalScale);
-                }, 300);
-            }
-        }
-        
-        function showArtworkInfo(artwork) {
-            const infoPanel = document.getElementById('artworkInfo');
-            document.getElementById('artworkTitle').textContent = artwork.title;
-            document.getElementById('artworkDate').textContent = `Créée le ${artwork.date}`;
-            document.getElementById('artworkDetails').textContent = `${artwork.strokes.length} traits • Tapez pour fermer`;
-            
-            infoPanel.style.display = 'block';
-            
-            // Fermer au clic
-            infoPanel.onclick = () => {
-                infoPanel.style.display = 'none';
-                infoPanel.onclick = null;
-            };
-            
-            // Fermer automatiquement après 5 secondes
-            setTimeout(() => {
-                if (infoPanel.style.display === 'block') {
-                    infoPanel.style.display = 'none';
-                    infoPanel.onclick = null;
-                }
-            }, 5000);
-        }
-        
-        function createArtworkCanvas(artwork) {
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = 400;
-            tempCanvas.height = 300;
-            
-            // Fond blanc
-            tempCtx.fillStyle = 'white';
-            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-            
-            // Redessiner les traits
-            artwork.strokes.forEach(stroke => {
-                if (stroke.length > 0) {
-                    tempCtx.beginPath();
-                    tempCtx.moveTo(stroke[0].x * 2, stroke[0].y * 2);
-                    
-                    for (let i = 1; i < stroke.length; i++) {
-                        tempCtx.lineWidth = stroke[i].size * 2;
-                        tempCtx.strokeStyle = stroke[i].color;
-                        tempCtx.lineTo(stroke[i].x * 2, stroke[i].y * 2);
-                    }
-                    tempCtx.stroke();
-                }
-            });
-            
-            return tempCanvas;
-        }
-        
-        // Gestion des modes
-        function switchMode(mode) {
-            currentMode = mode;
-            
-            // Mise à jour des boutons
-            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-            
-            // Affichage des modes
-            document.querySelectorAll('.drawing-mode, .gallery-mode').forEach(el => el.classList.remove('active'));
-            
-            if (mode === 'drawing') {
-                document.querySelector('.drawing-mode').classList.add('active');
-            } else {
-                document.querySelector('.gallery-mode').classList.add('active');
-                setTimeout(() => {
-                    document.getElementById('loadingOverlay').style.display = 'none';
-                    loadGalleryArtworks();
-                }, 1000);
-            }
-        }
-        
-        // Gestion de la caméra
-        async function toggleCamera() {
-            const video = document.getElementById('cameraVideo');
-            const toggleBtn = document.getElementById('cameraToggle');
-            
-            if (cameraStream) {
-                // Arrêter la caméra
-                cameraStream.getTracks().forEach(track => track.stop());
-                cameraStream = null;
-                video.style.display = 'none';
-                toggleBtn.textContent = '📷 Activer AR';
-                toggleBtn.classList.remove('active');
-                isARMode = false;
-            } else {
-                // Démarrer la caméra
-                try {
-                    toggleBtn.textContent = '⏳ Connexion...';
-                    
-                    const constraints = {
-                        video: {
-                            facingMode: currentCameraFacing,
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
-                        }
-                    };
-                    
-                    cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-                    video.srcObject = cameraStream;
-                    video.style.display = 'block';
-                    toggleBtn.textContent = '🔴 Arrêter AR';
-                    toggleBtn.classList.add('active');
-                    isARMode = true;
-                    
-                    // Ajuster la taille du video
-                    video.addEventListener('loadedmetadata', () => {
-                        resizeARCanvas();
-                    });
-                    
-                } catch (error) {
-                    console.error('Erreur accès caméra:', error);
-                    toggleBtn.textContent = '📷 Erreur caméra';
-                    
-                    let errorMessage = 'Impossible d\'accéder à la caméra. ';
-                    if (error.name === 'NotAllowedError') {
-                        errorMessage += 'Veuillez autoriser l\'accès à la caméra dans les paramètres de votre navigateur.';
-                    } else if (error.name === 'NotFoundError') {
-                        errorMessage += 'Aucune caméra trouvée sur cet appareil.';
-                    } else {
-                        errorMessage += 'Vérifiez que votre caméra n\'est pas utilisée par une autre application.';
-                    }
-                    
-                    alert(errorMessage);
-                    
-                    setTimeout(() => {
-                        toggleBtn.textContent = '📷 Activer AR';
-                    }, 3000);
-                }
-            }
-        }
-        
-        async function switchCamera() {
-            if (!cameraStream) {
-                alert('Activez d\'abord la caméra AR');
-                return;
-            }
-            
-            // Basculer entre caméra avant/arrière
-            currentCameraFacing = currentCameraFacing === 'environment' ? 'user' : 'environment';
-            
-            // Redémarrer la caméra avec la nouvelle orientation
-            cameraStream.getTracks().forEach(track => track.stop());
-            cameraStream = null;
-            
-            await toggleCamera(); // Arrêter
-            await toggleCamera(); // Redémarrer avec nouvelle caméra
-        }
-        
-        function takeScreenshot() {
-            if (!isARMode) {
-                alert('Activez d\'abord le mode AR pour prendre une capture');
-                return;
-            }
-            
-            // Créer un canvas temporaire pour combiner vidéo + 3D
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            const video = document.getElementById('cameraVideo');
-            
-            tempCanvas.width = arCanvas.width;
-            tempCanvas.height = arCanvas.height;
-            
-            // Dessiner la vidéo de la caméra
-            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
-            
-            // Dessiner le rendu 3D par-dessus
-            tempCtx.drawImage(arCanvas, 0, 0);
-            
-            // Télécharger l'image
-            const link = document.createElement('a');
-            link.download = `ar-capture-${new Date().getTime()}.png`;
-            link.href = tempCanvas.toDataURL('image/png');
-            link.click();
-            
-            // Feedback visuel
-            const flash = document.createElement('div');
-            flash.style.cssText = `
-                position: fixed;
-                top: 0; left: 0;
-                width: 100vw; height: 100vh;
-                background: white;
-                z-index: 9999;
-                opacity: 0.8;
-                pointer-events: none;
-            `;
-            document.body.appendChild(flash);
-            
-            setTimeout(() => {
-                flash.style.opacity = '0';
-                setTimeout(() => document.body.removeChild(flash), 200);
-            }, 100);
-        }
-        // Fonctions de la galerie AR
-        function resetARView() {
-            camera.position.set(0, 0, 5);
-            camera.lookAt(0, 0, 0);
-        }
-        
-        function toggleARInteraction() {
-            // Basculer entre mode navigation et mode interaction
-            const btn = event.target;
-            if (btn.textContent === '👆') {
-                btn.textContent = '🚶';
-                btn.title = 'Mode Navigation';
-                // Mode interaction : clic sur les œuvres
-                arCanvas.style.pointerEvents = 'auto';
-            } else {
-                btn.textContent = '👆';
-                btn.title = 'Mode Interaction';
-                // Mode navigation : mouvement de caméra
-                arCanvas.style.pointerEvents = 'auto';
-            }
-        }
-        
-        function shareGallery() {
-            if (navigator.share && artworks.length > 0) {
-                navigator.share({
-                    title: 'Ma Galerie AR',
-                    text: `Découvrez mes ${artworks.length} œuvres d'art en réalité augmentée !`,
-                    url: window.location.href
-                });
-            } else {
-                alert('Fonctionnalité de partage non disponible ou aucune œuvre à partager.');
-            }
-        }
-        
-        // Sauvegarde et chargement
-        function saveArtworksToStorage() {
-            localStorage.setItem('arGalleryArtworks', JSON.stringify(artworks));
-        }
-        
-        function loadArtworks() {
-            const saved = localStorage.getItem('arGalleryArtworks');
-            if (saved) {
-                artworks = JSON.parse(saved);
-            }
-        }
-        
-        // Gestion des erreurs et du débogage
-        window.addEventListener('error', function(e) {
-            console.error('Erreur dans l\'application:', e);
-        });
-        
-        // Messages d'accueil et permissions
+    <div class="main-content">
+      <!-- Mode Dessin -->
+      <div class="drawing-mode active">
+        <canvas class="drawing-canvas" id="drawingCanvas"></canvas>
+        <div class="drawing-toolbar">
+          <div class="tool-group">
+            <label class="tool-label">Couleur</label>
+            <input type="color" class="color-picker" id="colorPicker" value="#667eea" />
+          </div>
+          <div class="tool-group">
+            <label class="tool-label">Taille</label>
+            <input type="range" class="brush-size" id="brushSize" min="1" max="50" value="5" />
+            <span id="brushSizeValue">5px</span>
+          </div>
+          <div class="tool-group">
+            <button class="action-btn" onclick="clearCanvas()">🗑️ Effacer</button>
+            <button class="action-btn" onclick="saveArtwork()">💾 Sauver</button>
+            <button class="action-btn" onclick="undoLastStroke()">↶ Annuler</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mode Galerie AR -->
+      <div class="gallery-mode">
+        <div class="gallery-container">
+          <div class="ar-viewport" id="arViewport">
+            <video class="camera-video" id="cameraVideo" autoplay muted playsinline style="display:none;"></video>
+            <canvas class="ar-canvas" id="arCanvas"></canvas>
+          </div>
+          <div class="ar-overlay" id="arOverlay"></div>
+
+          <div class="camera-controls">
+            <button class="camera-btn" id="cameraToggle" onclick="toggleCamera()">📷 Activer AR</button>
+            <button class="camera-btn" onclick="switchCamera()">🔄 Basculer</button>
+            <button class="camera-btn" onclick="takeScreenshot()">📸 Capture</button>
+          </div>
+
+          <div class="artwork-counter" id="artworkCounter">0 œuvre(s) dans la galerie</div>
+          <div class="artwork-info" id="artworkInfo">
+            <h3 id="artworkTitle">Œuvre Sans Titre</h3>
+            <p id="artworkDate">Créée aujourd'hui</p>
+            <p id="artworkDetails">Cliquez pour interagir</p>
+          </div>
+
+          <div class="ar-controls">
+            <button class="ar-btn" onclick="resetARView()" title="Réinitialiser la vue">🔄</button>
+            <button class="ar-btn" id="interactionBtn" onclick="toggleARInteraction()" title="Mode Interaction">👆</button>
+            <button class="ar-btn" onclick="shareGallery()" title="Partager">📤</button>
+          </div>
+        </div>
+
+        <div class="loading-overlay" id="loadingOverlay">
+          <div class="spinner"></div>
+          <p>Chargement de la galerie AR...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- État global ---
+    let currentMode = 'drawing';
+    let canvas, ctx; let isDrawing = false; let currentColor = '#667eea'; let currentBrushSize = 5;
+    let artworks = []; let strokes = []; let currentStroke = [];
+    let scene, camera, renderer; let artworkMeshes = []; let raycaster = new THREE.Raycaster();
+    let isARMode = false; let cameraStream = null; let arCanvas, arCtx; let currentCameraFacing = 'environment';
+    let isInteractionMode = true; // true: cliquer œuvres / false: naviguer caméra
+
+    // --- App ready ---
+    document.addEventListener('DOMContentLoaded', () => {
+      initDrawingMode();
+      initGalleryMode();
+      loadArtworks();
+      welcomeIfFirstTime();
+    });
+
+    // --- Mode dessin ---
+    function initDrawingMode() {
+      canvas = document.getElementById('drawingCanvas');
+      ctx = canvas.getContext('2d');
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+      canvas.addEventListener('mousedown', startDrawing);
+      canvas.addEventListener('mousemove', draw);
+      canvas.addEventListener('mouseup', stopDrawing);
+      canvas.addEventListener('mouseout', stopDrawing);
+
+      canvas.addEventListener('touchstart', handleTouch, { passive: false });
+      canvas.addEventListener('touchmove', handleTouch, { passive: false });
+      canvas.addEventListener('touchend', stopDrawing);
+
+      document.getElementById('colorPicker').addEventListener('change', e => currentColor = e.target.value);
+      document.getElementById('brushSize').addEventListener('input', e => {
+        currentBrushSize = Number(e.target.value);
+        document.getElementById('brushSizeValue').textContent = e.target.value + 'px';
+      });
+    }
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // dessiner en px CSS
+      redrawCanvas();
+    }
+
+    function startDrawing(e) {
+      isDrawing = true; currentStroke = [];
+      const pos = getMousePos(e);
+      ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
+      currentStroke.push({ x: pos.x, y: pos.y, color: currentColor, size: currentBrushSize });
+    }
+
+    function draw(e) {
+      if (!isDrawing) return;
+      const pos = getMousePos(e);
+      ctx.lineWidth = currentBrushSize; ctx.strokeStyle = currentColor;
+      ctx.lineTo(pos.x, pos.y); ctx.stroke();
+      currentStroke.push({ x: pos.x, y: pos.y, color: currentColor, size: currentBrushSize });
+    }
+
+    function stopDrawing() {
+      if (!isDrawing) return; isDrawing = false;
+      if (currentStroke.length > 0) strokes.push([...currentStroke]);
+    }
+
+    function getMousePos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const cx = (e.clientX ?? e.touches?.[0]?.clientX) - rect.left;
+      const cy = (e.clientY ?? e.touches?.[0]?.clientY) - rect.top;
+      return { x: cx, y: cy };
+    }
+
+    function handleTouch(e) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const type = e.type === 'touchstart' ? 'mousedown' : 'mousemove';
+      canvas.dispatchEvent(new MouseEvent(type, { clientX: touch.clientX, clientY: touch.clientY }));
+    }
+
+    function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); strokes = []; }
+    function undoLastStroke() { if (strokes.length) { strokes.pop(); redrawCanvas(); } }
+
+    function redrawCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      strokes.forEach(stroke => {
+        if (!stroke.length) return; ctx.beginPath(); ctx.moveTo(stroke[0].x, stroke[0].y);
+        for (let i = 1; i < stroke.length; i++) { ctx.lineWidth = stroke[i].size; ctx.strokeStyle = stroke[i].color; ctx.lineTo(stroke[i].x, stroke[i].y); }
+        ctx.stroke();
+      });
+    }
+
+    function saveArtwork() {
+      if (!strokes.length) { alert('Aucun dessin à sauvegarder !'); return; }
+      const rect = canvas.getBoundingClientRect();
+      const artwork = {
+        id: Date.now(),
+        title: `Œuvre ${artworks.length + 1}`,
+        date: new Date().toLocaleDateString('fr-FR'),
+        strokes: JSON.parse(JSON.stringify(strokes)),
+        canvasSize: { width: Math.round(rect.width), height: Math.round(rect.height) },
+        thumbnail: canvas.toDataURL('image/png')
+      };
+      artworks.push(artwork); saveArtworksToStorage();
+      const toolbar = document.querySelector('.drawing-toolbar');
+      const oldBg = toolbar.style.background; toolbar.style.background = 'rgba(102,234,146,.9)';
+      setTimeout(() => toolbar.style.background = oldBg || 'rgba(255,255,255,.9)', 500);
+      alert('Œuvre sauvegardée ! Allez voir la galerie AR.');
+    }
+
+    // --- Galerie AR ---
+    function initGalleryMode() {
+      const viewport = document.getElementById('arViewport');
+      arCanvas = document.getElementById('arCanvas'); arCtx = arCanvas.getContext('2d');
+      renderer = new THREE.WebGLRenderer({ canvas: arCanvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(window.devicePixelRatio || 1);
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+      camera.position.z = 5;
+
+      const ambient = new THREE.AmbientLight(0xffffff, 0.8); scene.add(ambient);
+      const point = new THREE.PointLight(0xffffff, 1); point.position.set(10, 10, 10); scene.add(point);
+
+      resizeARCanvas();
+      window.addEventListener('resize', resizeARCanvas);
+
+      // Contrôles caméra (drag) et clic œuvres
+      let isDragging = false; let previousTouch = null;
+      arCanvas.addEventListener('mousedown', e => { if (!isInteractionMode) isDragging = true; });
+      arCanvas.addEventListener('mousemove', e => {
+        if (!isDragging || isInteractionMode) return;
+        const rect = arCanvas.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        camera.position.x = x * 3; camera.position.y = y * 3; camera.lookAt(scene.position);
+      });
+      window.addEventListener('mouseup', () => { isDragging = false; previousTouch = null; });
+      arCanvas.addEventListener('touchstart', e => { e.preventDefault(); previousTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY }; if (!isInteractionMode) isDragging = true; }, { passive: false });
+      arCanvas.addEventListener('touchmove', e => { e.preventDefault(); if (!isDragging || isInteractionMode || !previousTouch) return; const t = e.touches[0]; const dx = t.clientX - previousTouch.x; const dy = t.clientY - previousTouch.y; camera.position.x += dx * 0.01; camera.position.y -= dy * 0.01; camera.lookAt(scene.position); previousTouch = { x: t.clientX, y: t.clientY }; }, { passive: false });
+      window.addEventListener('touchend', () => { isDragging = false; previousTouch = null; });
+
+      // Clic sur œuvres — attaché une seule fois
+      arCanvas.addEventListener('click', onArtworkClick);
+
+      animate();
+    }
+
+    function resizeARCanvas() {
+      const viewport = document.getElementById('arViewport');
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.round(viewport.clientWidth * dpr);
+      const h = Math.round(viewport.clientHeight * dpr);
+      arCanvas.width = w; arCanvas.height = h;
+      renderer.setSize(viewport.clientWidth, viewport.clientHeight, false);
+      camera.aspect = viewport.clientWidth / viewport.clientHeight; camera.updateProjectionMatrix();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (currentMode === 'gallery') {
+        artworkMeshes.forEach((mesh, i) => { mesh.rotation.y += 0.005; mesh.position.y = Math.sin(Date.now() * 0.001 + i) * 0.3; });
+        renderer.render(scene, camera);
+      }
+    }
+
+    function loadGalleryArtworks() {
+      // Nettoyage
+      artworkMeshes.forEach(mesh => { scene.remove(mesh); mesh.geometry?.dispose?.(); mesh.material?.map?.dispose?.(); mesh.material?.dispose?.(); });
+      artworkMeshes = [];
+
+      const counter = document.getElementById('artworkCounter');
+      if (!artworks.length) { counter.textContent = 'Aucune œuvre dans la galerie'; return; }
+      counter.textContent = `${artworks.length} œuvre(s) dans la galerie`;
+
+      artworks.forEach((artwork, index) => {
+        const textureCanvas = createArtworkCanvas(artwork);
+        const texture = new THREE.CanvasTexture(textureCanvas); texture.flipY = false; texture.needsUpdate = true;
+        const aspect = textureCanvas.width / textureCanvas.height;
+        const height = 1.5; const width = height * aspect;
+        const geometry = new THREE.PlaneGeometry(width, height);
+        const material = new THREE.MeshLambertMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, opacity: 0.95 });
+        const mesh = new THREE.Mesh(geometry, material);
+
+        const angle = (index / artworks.length) * Math.PI * 2;
+        const radius = 3 + Math.sin(index * 1.5) * 0.5;
+        mesh.position.set(Math.cos(angle) * radius, Math.sin(index * 2) * 1.2, Math.sin(angle) * radius);
+        mesh.lookAt(0, mesh.position.y, 0); mesh.rotation.z = (Math.random() - .5) * .3;
+        mesh.userData = { artwork, index };
+        scene.add(mesh); artworkMeshes.push(mesh);
+      });
+    }
+
+    function onArtworkClick(event) {
+      if (!isInteractionMode) return; // en navigation, ignorer
+      const rect = arCanvas.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      raycaster.setFromCamera(mouse, camera);
+      const hit = raycaster.intersectObjects(artworkMeshes);
+      if (hit.length) {
+        const mesh = hit[0].object; const selected = mesh.userData.artwork; showArtworkInfo(selected);
+        const s = mesh.scale.clone(); mesh.scale.multiplyScalar(1.2); setTimeout(() => mesh.scale.copy(s), 300);
+      }
+    }
+
+    function showArtworkInfo(artwork) {
+      const info = document.getElementById('artworkInfo');
+      document.getElementById('artworkTitle').textContent = artwork.title;
+      document.getElementById('artworkDate').textContent = `Créée le ${artwork.date}`;
+      document.getElementById('artworkDetails').textContent = `${artwork.strokes.length} traits • Cliquez pour fermer`;
+      info.style.display = 'block';
+      const hide = () => { info.style.display = 'none'; info.removeEventListener('click', hide); };
+      info.addEventListener('click', hide);
+      setTimeout(() => { if (info.style.display === 'block') hide(); }, 5000);
+    }
+
+    function createArtworkCanvas(artwork) {
+      const W = 600, H = 450; // meilleure définition texture
+      const c = document.createElement('canvas'); c.width = W; c.height = H; const t = c.getContext('2d');
+      t.fillStyle = '#fff'; t.fillRect(0, 0, W, H);
+      const sx = W / artwork.canvasSize.width; const sy = H / artwork.canvasSize.height;
+      artwork.strokes.forEach(stroke => {
+        if (!stroke.length) return; t.beginPath(); t.moveTo(stroke[0].x * sx, stroke[0].y * sy);
+        for (let i = 1; i < stroke.length; i++) { t.lineWidth = stroke[i].size * ((sx + sy) / 2); t.strokeStyle = stroke[i].color; t.lineTo(stroke[i].x * sx, stroke[i].y * sy); }
+        t.stroke();
+      });
+      return c;
+    }
+
+    // --- Modes ---
+    function switchMode(ev, mode) {
+      currentMode = mode;
+      document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+      ev.currentTarget.classList.add('active');
+      document.querySelectorAll('.drawing-mode, .gallery-mode').forEach(el => el.classList.remove('active'));
+
+      if (mode === 'drawing') {
+        document.querySelector('.drawing-mode').classList.add('active');
+      } else {
+        document.querySelector('.gallery-mode').classList.add('active');
+        const loader = document.getElementById('loadingOverlay'); loader.style.display = 'flex';
+        // léger délai pour effet + (re)charger
+        setTimeout(() => { loadGalleryArtworks(); loader.style.display = 'none'; }, 600);
+      }
+    }
+
+    // --- Caméra ---
+    async function toggleCamera() {
+      const video = document.getElementById('cameraVideo');
+      const btn = document.getElementById('cameraToggle');
+      if (cameraStream) { // stop
+        cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null;
+        video.style.display = 'none'; btn.textContent = '📷 Activer AR'; btn.classList.remove('active'); isARMode = false; return;
+      }
+      try {
+        btn.textContent = '⏳ Connexion...';
+        const constraints = { video: { facingMode: currentCameraFacing, width: { ideal: 1280 }, height: { ideal: 720 } } };
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = cameraStream; video.style.display = 'block'; btn.textContent = '🔴 Arrêter AR'; btn.classList.add('active'); isARMode = true;
+        video.addEventListener('loadedmetadata', resizeARCanvas, { once: true });
+      } catch (error) {
+        console.error('Erreur accès caméra:', error);
+        btn.textContent = '📷 Erreur caméra'; let msg = "Impossible d'accéder à la caméra. ";
+        if (error.name === 'NotAllowedError') msg += 'Veuillez autoriser la caméra dans votre navigateur.';
+        else if (error.name === 'NotFoundError') msg += 'Aucune caméra trouvée sur cet appareil.';
+        else msg += "Vérifiez qu'elle n'est pas utilisée ailleurs.";
+        alert(msg); setTimeout(() => { btn.textContent = '📷 Activer AR'; }, 3000);
+      }
+    }
+
+    async function switchCamera() {
+      if (!('mediaDevices' in navigator)) return alert('Caméra non supportée');
+      // si caméra active, on la redémarre avec l'autre facingMode
+      currentCameraFacing = currentCameraFacing === 'environment' ? 'user' : 'environment';
+      if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+      // relance unique (au lieu de double toggle buggy)
+      await toggleCamera();
+    }
+
+    function takeScreenshot() {
+      if (!isARMode) return alert("Activez d'abord le mode AR pour prendre une capture");
+      const temp = document.createElement('canvas'); const t2d = temp.getContext('2d');
+      const video = document.getElementById('cameraVideo');
+      temp.width = arCanvas.width; temp.height = arCanvas.height;
+      t2d.drawImage(video, 0, 0, temp.width, temp.height); t2d.drawImage(arCanvas, 0, 0);
+      const a = document.createElement('a'); a.download = `ar-capture-${Date.now()}.png`; a.href = temp.toDataURL('image/png'); a.click();
+      const flash = document.createElement('div'); flash.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:9999;opacity:.8;pointer-events:none;'; document.body.appendChild(flash);
+      setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 200); }, 100);
+    }
+
+    // --- Galerie : utilitaires ---
+    function resetARView() { camera.position.set(0, 0, 5); camera.lookAt(0, 0, 0); }
+    function toggleARInteraction() {
+      isInteractionMode = !isInteractionMode;
+      const btn = document.getElementById('interactionBtn');
+      if (isInteractionMode) { btn.textContent = '👆'; btn.title = 'Mode Interaction'; }
+      else { btn.textContent = '🚶'; btn.title = 'Mode Navigation'; }
+    }
+    function shareGallery() {
+      if (navigator.share && artworks.length) navigator.share({ title: 'Ma Galerie AR', text: `Découvrez mes ${artworks.length} œuvres en réalité augmentée !`, url: window.location.href });
+      else alert('Partage non disponible ou aucune œuvre.');
+    }
+
+    // --- Storage ---
+    function saveArtworksToStorage() { localStorage.setItem('arGalleryArtworks', JSON.stringify(artworks)); }
+    function loadArtworks() { const saved = localStorage.getItem('arGalleryArtworks'); if (saved) artworks = JSON.parse(saved); }
+
+    // --- Divers ---
+    window.addEventListener('error', e => console.error("Erreur dans l'application:", e));
+    function welcomeIfFirstTime() {
+      if (!localStorage.getItem('arGalleryWelcomed')) {
+        setTimeout(() => alert('🎨 Bienvenue !\n\n1) Dessinez\n2) Sauvegardez 💾\n3) Explorez en AR\n4) Activez la caméra pour une expérience immersive.'), 800);
+        localStorage.setItem('arGalleryWelcomed','1');
+      }
+    }
+
+    // Permissions caméra info
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!('mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices)) {
+        console.warn('API Caméra non supportée');
         setTimeout(() => {
-            if (artworks.length === 0) {
-                alert('🎨 Bienvenue dans AR Gallery Studio !\n\n1. Créez vos dessins dans l\'onglet "Dessiner"\n2. Sauvegardez-les avec le bouton 💾\n3. Explorez-les en réalité augmentée dans la "Galerie AR"\n4. Activez votre caméra pour une expérience immersive !');
-            }
-        }, 1000);
-        
-        // Vérification des permissions de caméra au chargement
-        document.addEventListener('DOMContentLoaded', function() {
-            if ('mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices) {
-                // API supportée
-                console.log('API Caméra supportée ✓');
-            } else {
-                console.warn('API Caméra non supportée sur ce navigateur');
-                // Masquer les boutons de caméra si non supporté
-                setTimeout(() => {
-                    const cameraControls = document.querySelector('.camera-controls');
-                    if (cameraControls) {
-                        cameraControls.innerHTML = '<div style="background: rgba(255,0,0,0.1); padding: 1rem; border-radius: 10px; color: white;">Caméra non disponible</div>';
-                    }
-                }, 1000);
-            }
-        });
-    </script>
+          const controls = document.querySelector('.camera-controls');
+          if (controls) controls.innerHTML = '<div style="background:rgba(255,0,0,.1);padding:1rem;border-radius:10px;color:#fff">Caméra non disponible</div>';
+        }, 500);
+      }
+    });
+  </script>
 </body>
 </html>
