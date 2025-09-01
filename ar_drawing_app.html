@@ -179,6 +179,25 @@
             overflow: hidden;
         }
         
+        .camera-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        
+        .ar-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+        }
+        
         .ar-overlay {
             position: absolute;
             top: 0;
@@ -197,6 +216,40 @@
             display: flex;
             gap: 1rem;
             z-index: 100;
+        }
+        
+        .camera-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 100;
+        }
+        
+        .camera-btn {
+            padding: 0.8rem;
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .camera-btn:hover {
+            background: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .camera-btn.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
         }
         
         .ar-btn {
@@ -324,8 +377,17 @@
             <!-- Mode Galerie AR -->
             <div class="gallery-mode">
                 <div class="gallery-container">
-                    <div class="ar-viewport" id="arViewport"></div>
+                    <div class="ar-viewport" id="arViewport">
+                        <video class="camera-video" id="cameraVideo" autoplay muted playsinline style="display: none;"></video>
+                        <canvas class="ar-canvas" id="arCanvas"></canvas>
+                    </div>
                     <div class="ar-overlay" id="arOverlay"></div>
+                    
+                    <div class="camera-controls">
+                        <button class="camera-btn" id="cameraToggle" onclick="toggleCamera()">📷 Activer AR</button>
+                        <button class="camera-btn" onclick="switchCamera()">🔄 Basculer</button>
+                        <button class="camera-btn" onclick="takeScreenshot()">📸 Capture</button>
+                    </div>
                     
                     <div class="artwork-counter" id="artworkCounter">
                         0 œuvres dans la galerie
@@ -339,7 +401,7 @@
                     
                     <div class="ar-controls">
                         <button class="ar-btn" onclick="resetARView()" title="Réinitialiser la vue">🔄</button>
-                        <button class="ar-btn" onclick="toggleARMode()" title="Mode AR">📱</button>
+                        <button class="ar-btn" onclick="toggleARInteraction()" title="Mode Interaction">👆</button>
                         <button class="ar-btn" onclick="shareGallery()" title="Partager">📤</button>
                     </div>
                 </div>
@@ -365,6 +427,9 @@
         let scene, camera, renderer;
         let artworkMeshes = [];
         let isARMode = false;
+        let cameraStream = null;
+        let arCanvas, arCtx;
+        let currentCameraFacing = 'environment'; // 'user' pour avant, 'environment' pour arrière
         
         // Initialisation de l'application
         document.addEventListener('DOMContentLoaded', function() {
@@ -522,49 +587,105 @@
         // Initialisation du mode galerie AR
         function initGalleryMode() {
             const viewport = document.getElementById('arViewport');
+            arCanvas = document.getElementById('arCanvas');
+            arCtx = arCanvas.getContext('2d');
+            
+            // Ajustement de la taille du canvas AR
+            resizeARCanvas();
+            window.addEventListener('resize', resizeARCanvas);
             
             // Configuration Three.js
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, viewport.offsetWidth / viewport.offsetHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer = new THREE.WebGLRenderer({ 
+                canvas: arCanvas,
+                antialias: true, 
+                alpha: true 
+            });
             
             renderer.setSize(viewport.offsetWidth, viewport.offsetHeight);
-            renderer.setClearColor(0x000011, 0.3);
-            viewport.appendChild(renderer.domElement);
+            renderer.setClearColor(0x000000, 0);
             
             // Éclairage
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
             scene.add(ambientLight);
             
-            const pointLight = new THREE.PointLight(0xffffff, 0.8);
+            const pointLight = new THREE.PointLight(0xffffff, 1);
             pointLight.position.set(10, 10, 10);
             scene.add(pointLight);
             
             // Position initiale de la caméra
             camera.position.z = 5;
             
-            // Contrôles de la caméra (simulation)
-            let mouseX = 0, mouseY = 0;
-            viewport.addEventListener('mousemove', (e) => {
-                mouseX = (e.clientX / viewport.offsetWidth) * 2 - 1;
-                mouseY = -(e.clientY / viewport.offsetHeight) * 2 + 1;
-                
-                camera.position.x = mouseX * 2;
-                camera.position.y = mouseY * 2;
-                camera.lookAt(scene.position);
-            });
+            // Contrôles tactiles et souris
+            let isDragging = false;
+            let previousTouch = null;
             
-            // Redimensionnement
-            window.addEventListener('resize', () => {
-                if (currentMode === 'gallery') {
-                    camera.aspect = viewport.offsetWidth / viewport.offsetHeight;
-                    camera.updateProjectionMatrix();
-                    renderer.setSize(viewport.offsetWidth, viewport.offsetHeight);
-                }
-            });
+            arCanvas.addEventListener('mousedown', startCameraControl);
+            arCanvas.addEventListener('mousemove', updateCameraControl);
+            arCanvas.addEventListener('mouseup', stopCameraControl);
+            
+            arCanvas.addEventListener('touchstart', handleTouchStart);
+            arCanvas.addEventListener('touchmove', handleTouchMove);
+            arCanvas.addEventListener('touchend', stopCameraControl);
+            
+            function startCameraControl(e) {
+                isDragging = true;
+            }
+            
+            function updateCameraControl(e) {
+                if (!isDragging) return;
+                
+                const rect = arCanvas.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                
+                camera.position.x = x * 3;
+                camera.position.y = y * 3;
+                camera.lookAt(scene.position);
+            }
+            
+            function stopCameraControl() {
+                isDragging = false;
+                previousTouch = null;
+            }
+            
+            function handleTouchStart(e) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                previousTouch = { x: touch.clientX, y: touch.clientY };
+                isDragging = true;
+            }
+            
+            function handleTouchMove(e) {
+                e.preventDefault();
+                if (!isDragging || !previousTouch) return;
+                
+                const touch = e.touches[0];
+                const deltaX = touch.clientX - previousTouch.x;
+                const deltaY = touch.clientY - previousTouch.y;
+                
+                camera.position.x += deltaX * 0.01;
+                camera.position.y -= deltaY * 0.01;
+                camera.lookAt(scene.position);
+                
+                previousTouch = { x: touch.clientX, y: touch.clientY };
+            }
             
             // Démarrage de la boucle de rendu
             animate();
+        }
+        
+        function resizeARCanvas() {
+            const viewport = document.getElementById('arViewport');
+            arCanvas.width = viewport.offsetWidth;
+            arCanvas.height = viewport.offsetHeight;
+            
+            if (renderer) {
+                renderer.setSize(viewport.offsetWidth, viewport.offsetHeight);
+                camera.aspect = viewport.offsetWidth / viewport.offsetHeight;
+                camera.updateProjectionMatrix();
+            }
         }
         
         function animate() {
@@ -596,30 +717,97 @@
             // Création des œuvres en 3D
             artworks.forEach((artwork, index) => {
                 const texture = new THREE.CanvasTexture(createArtworkCanvas(artwork));
+                texture.flipY = false; // Important pour l'orientation correcte
+                
                 const geometry = new THREE.PlaneGeometry(2, 1.5);
                 const material = new THREE.MeshLambertMaterial({ 
                     map: texture, 
                     transparent: true,
-                    side: THREE.DoubleSide
+                    side: THREE.DoubleSide,
+                    opacity: 0.9
                 });
                 
                 const mesh = new THREE.Mesh(geometry, material);
                 
-                // Position en cercle
+                // Position en cercle avec plus de variation
                 const angle = (index / artworks.length) * Math.PI * 2;
-                const radius = 4;
+                const radius = 3 + Math.sin(index * 1.5) * 0.5; // Rayon variable
                 mesh.position.x = Math.cos(angle) * radius;
                 mesh.position.z = Math.sin(angle) * radius;
-                mesh.position.y = (Math.random() - 0.5) * 2;
+                mesh.position.y = (Math.sin(index * 2) * 1.5); // Hauteur variée
                 
-                // Rotation vers le centre
+                // Rotation vers le centre avec légère inclinaison
                 mesh.lookAt(0, mesh.position.y, 0);
+                mesh.rotation.z = (Math.random() - 0.5) * 0.3; // Rotation aléatoire légère
                 
-                mesh.userData = { artwork, index };
+                // Données pour l'interaction
+                mesh.userData = { 
+                    artwork, 
+                    index,
+                    originalPosition: mesh.position.clone(),
+                    originalRotation: mesh.rotation.clone()
+                };
+                
+                // Gestion des clics sur les œuvres
+                mesh.callback = function() {
+                    showArtworkInfo(artwork);
+                };
                 
                 scene.add(mesh);
                 artworkMeshes.push(mesh);
             });
+            
+            // Détection de clic sur les œuvres
+            arCanvas.addEventListener('click', onArtworkClick);
+        }
+        
+        function onArtworkClick(event) {
+            const rect = arCanvas.getBoundingClientRect();
+            const mouse = new THREE.Vector2();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+            
+            const intersects = raycaster.intersectObjects(artworkMeshes);
+            
+            if (intersects.length > 0) {
+                const selectedArtwork = intersects[0].object.userData.artwork;
+                showArtworkInfo(selectedArtwork);
+                
+                // Animation de sélection
+                const mesh = intersects[0].object;
+                const originalScale = mesh.scale.clone();
+                mesh.scale.multiplyScalar(1.2);
+                
+                setTimeout(() => {
+                    mesh.scale.copy(originalScale);
+                }, 300);
+            }
+        }
+        
+        function showArtworkInfo(artwork) {
+            const infoPanel = document.getElementById('artworkInfo');
+            document.getElementById('artworkTitle').textContent = artwork.title;
+            document.getElementById('artworkDate').textContent = `Créée le ${artwork.date}`;
+            document.getElementById('artworkDetails').textContent = `${artwork.strokes.length} traits • Tapez pour fermer`;
+            
+            infoPanel.style.display = 'block';
+            
+            // Fermer au clic
+            infoPanel.onclick = () => {
+                infoPanel.style.display = 'none';
+                infoPanel.onclick = null;
+            };
+            
+            // Fermer automatiquement après 5 secondes
+            setTimeout(() => {
+                if (infoPanel.style.display === 'block') {
+                    infoPanel.style.display = 'none';
+                    infoPanel.onclick = null;
+                }
+            }, 5000);
         }
         
         function createArtworkCanvas(artwork) {
@@ -672,22 +860,146 @@
             }
         }
         
+        // Gestion de la caméra
+        async function toggleCamera() {
+            const video = document.getElementById('cameraVideo');
+            const toggleBtn = document.getElementById('cameraToggle');
+            
+            if (cameraStream) {
+                // Arrêter la caméra
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+                video.style.display = 'none';
+                toggleBtn.textContent = '📷 Activer AR';
+                toggleBtn.classList.remove('active');
+                isARMode = false;
+            } else {
+                // Démarrer la caméra
+                try {
+                    toggleBtn.textContent = '⏳ Connexion...';
+                    
+                    const constraints = {
+                        video: {
+                            facingMode: currentCameraFacing,
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    };
+                    
+                    cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    video.srcObject = cameraStream;
+                    video.style.display = 'block';
+                    toggleBtn.textContent = '🔴 Arrêter AR';
+                    toggleBtn.classList.add('active');
+                    isARMode = true;
+                    
+                    // Ajuster la taille du video
+                    video.addEventListener('loadedmetadata', () => {
+                        resizeARCanvas();
+                    });
+                    
+                } catch (error) {
+                    console.error('Erreur accès caméra:', error);
+                    toggleBtn.textContent = '📷 Erreur caméra';
+                    
+                    let errorMessage = 'Impossible d\'accéder à la caméra. ';
+                    if (error.name === 'NotAllowedError') {
+                        errorMessage += 'Veuillez autoriser l\'accès à la caméra dans les paramètres de votre navigateur.';
+                    } else if (error.name === 'NotFoundError') {
+                        errorMessage += 'Aucune caméra trouvée sur cet appareil.';
+                    } else {
+                        errorMessage += 'Vérifiez que votre caméra n\'est pas utilisée par une autre application.';
+                    }
+                    
+                    alert(errorMessage);
+                    
+                    setTimeout(() => {
+                        toggleBtn.textContent = '📷 Activer AR';
+                    }, 3000);
+                }
+            }
+        }
+        
+        async function switchCamera() {
+            if (!cameraStream) {
+                alert('Activez d\'abord la caméra AR');
+                return;
+            }
+            
+            // Basculer entre caméra avant/arrière
+            currentCameraFacing = currentCameraFacing === 'environment' ? 'user' : 'environment';
+            
+            // Redémarrer la caméra avec la nouvelle orientation
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+            
+            await toggleCamera(); // Arrêter
+            await toggleCamera(); // Redémarrer avec nouvelle caméra
+        }
+        
+        function takeScreenshot() {
+            if (!isARMode) {
+                alert('Activez d\'abord le mode AR pour prendre une capture');
+                return;
+            }
+            
+            // Créer un canvas temporaire pour combiner vidéo + 3D
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            const video = document.getElementById('cameraVideo');
+            
+            tempCanvas.width = arCanvas.width;
+            tempCanvas.height = arCanvas.height;
+            
+            // Dessiner la vidéo de la caméra
+            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+            
+            // Dessiner le rendu 3D par-dessus
+            tempCtx.drawImage(arCanvas, 0, 0);
+            
+            // Télécharger l'image
+            const link = document.createElement('a');
+            link.download = `ar-capture-${new Date().getTime()}.png`;
+            link.href = tempCanvas.toDataURL('image/png');
+            link.click();
+            
+            // Feedback visuel
+            const flash = document.createElement('div');
+            flash.style.cssText = `
+                position: fixed;
+                top: 0; left: 0;
+                width: 100vw; height: 100vh;
+                background: white;
+                z-index: 9999;
+                opacity: 0.8;
+                pointer-events: none;
+            `;
+            document.body.appendChild(flash);
+            
+            setTimeout(() => {
+                flash.style.opacity = '0';
+                setTimeout(() => document.body.removeChild(flash), 200);
+            }, 100);
+        }
         // Fonctions de la galerie AR
         function resetARView() {
             camera.position.set(0, 0, 5);
             camera.lookAt(0, 0, 0);
         }
         
-        function toggleARMode() {
-            isARMode = !isARMode;
-            const viewport = document.getElementById('arViewport');
-            
-            if (isARMode) {
-                viewport.style.background = 'linear-gradient(45deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1))';
-                renderer.setClearColor(0x000000, 0);
+        function toggleARInteraction() {
+            // Basculer entre mode navigation et mode interaction
+            const btn = event.target;
+            if (btn.textContent === '👆') {
+                btn.textContent = '🚶';
+                btn.title = 'Mode Navigation';
+                // Mode interaction : clic sur les œuvres
+                arCanvas.style.pointerEvents = 'auto';
             } else {
-                viewport.style.background = '#000';
-                renderer.setClearColor(0x000011, 0.3);
+                btn.textContent = '👆';
+                btn.title = 'Mode Interaction';
+                // Mode navigation : mouvement de caméra
+                arCanvas.style.pointerEvents = 'auto';
             }
         }
         
@@ -720,12 +1032,29 @@
             console.error('Erreur dans l\'application:', e);
         });
         
-        // Messages d'accueil
+        // Messages d'accueil et permissions
         setTimeout(() => {
             if (artworks.length === 0) {
-                alert('Bienvenue ! Créez votre premier dessin, puis explorez-le en réalité augmentée dans la galerie !');
+                alert('🎨 Bienvenue dans AR Gallery Studio !\n\n1. Créez vos dessins dans l\'onglet "Dessiner"\n2. Sauvegardez-les avec le bouton 💾\n3. Explorez-les en réalité augmentée dans la "Galerie AR"\n4. Activez votre caméra pour une expérience immersive !');
             }
         }, 1000);
+        
+        // Vérification des permissions de caméra au chargement
+        document.addEventListener('DOMContentLoaded', function() {
+            if ('mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices) {
+                // API supportée
+                console.log('API Caméra supportée ✓');
+            } else {
+                console.warn('API Caméra non supportée sur ce navigateur');
+                // Masquer les boutons de caméra si non supporté
+                setTimeout(() => {
+                    const cameraControls = document.querySelector('.camera-controls');
+                    if (cameraControls) {
+                        cameraControls.innerHTML = '<div style="background: rgba(255,0,0,0.1); padding: 1rem; border-radius: 10px; color: white;">Caméra non disponible</div>';
+                    }
+                }, 1000);
+            }
+        });
     </script>
 </body>
 </html>
